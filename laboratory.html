@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>Showing Elevation Along a Path</title>
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 100%;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+    <script src="https://www.google.com/jsapi"></script>
+  </head>
+  <body>
+    <div>
+      <div id="map" style="height:450px;"></div>
+      <div id="elevation_chart"></div>
+      <script src = "interpolizer.js"></script>
+      <script>
+      // Load the Visualization API and the columnchart package.
+      google.load('visualization', '1', {packages: ['columnchart']});
+
+      function initMap() {
+		var radius = 2000;
+		//var startAngle = Math.PI / 2 + Math.PI / 3;
+		//var startAngle = 0;
+		var startAngle = Math.PI + Math.PI / 3;
+		//var endAngle = Math.PI * 2;
+		var endAngle = startAngle + Math.PI / 2;
+        var center =
+        //    {lat: 45.105847,         lng: 7.543418        }; // Pianezza
+		    {lat: 45.06321502681474, lng: 7.65816499893549}; // PoliTo
+		//    {lat: 45.04118503748324, lng: 7.71451958195632}; // Small mountain
+		//    {lat: 45.0138842,        lng: 7.8223544       }; // Chieri
+		//    {lat: 45.049561,         lng: 7.297248        }; // Aiman position
+		var antennaHeight = 10;
+		var retrieverHeight = 0;
+		var samples = 30;
+		var angleStep = 0.03;
+		
+		var matrixObjct1 = init_interpolation("N45E007.hgt");
+		var matrixObjct2 = init_interpolation("N45E008.hgt");
+
+        var map = new google.maps.Map(document.getElementById('map'), {
+          zoom: 13,
+          center: center,
+          mapTypeId: 'terrain'
+        });
+
+        // Try HTML5 geolocation.
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function(position) {
+            var pos = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+			//DEBUG
+			//pos = center;
+			
+            map.setCenter(pos);
+
+			setTimeout(function() {
+				// Draw the path, using the Visualization API and the Elevation service.
+				displayPathElevation(pos, radius, startAngle, endAngle, angleStep, samples, antennaHeight, retrieverHeight, matrixObjct1, matrixObjct2, map);
+			}, 1000);
+			
+          }, function() {
+            handleLocationError(true);
+          });
+        } else {
+          // Browser doesn't support Geolocation
+          handleLocationError(false);
+        }
+
+      }
+	  
+      function handleLocationError(browserHasGeolocation) {
+        alert(browserHasGeolocation ?
+			'Error: The Geolocation service failed.' :
+            'Error: Your browser doesn\'t support geolocation.');
+      }
+      //Calculate the distance between two point
+      function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+          var R = 6371; // Radius of the earth in km
+          var dLat = deg2rad(lat2-lat1);  // deg2rad below
+          var dLon = deg2rad(lon2-lon1);
+          var a =
+              Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+              Math.sin(dLon/2) * Math.sin(dLon/2)
+          ;
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            var d = R * c; // Distance in km
+            return d;
+      }
+
+      function deg2rad(deg) {
+        return deg * (Math.PI/180)
+      }
+	  
+      var newHeight = new Array();
+	  
+      function getHeight(height,distance,n)	{
+         var R = 6371000;
+         var angle =distance/R;
+         //alert("Angle of theta is :"+angle);
+         var angle1=angle/2
+        // alert("angle1 of theta is :"+angle1);
+         var N=n/2;
+      //   alert("N is " + N);
+
+            for (var i = 0; i < n+1; i++)
+            {
+              //alert("iteration no "+i);
+              if(N!=0)
+              {
+                var angle2=angle/n;
+                // alert("angle2 of theta is :"+angle2);
+                angle2=N*angle2;
+              //   alert("angle2 of theta after N :"+angle2);
+                newHeight[i]=height[i]+R*(Math.cos(angle2)-Math.cos(angle1));
+              //  alert("Value of h"+R*(Math.cos(N*(angle/n))-Math.cos(angle1)));
+                // alert("height[i] is " + height[i]);
+              //  alert("newHeight[i] is  " + newHeight[i]);
+                N=N-1;
+              }
+              else
+              {
+                newHeight[i]=height[i]+R*(1- Math.cos(angle1));
+                  //   alert("Value of h"+R*(1- Math.cos(angle)));
+                  //  alert("height[i] is  " + height[i]);
+                //    alert("newHeight[i] is " + newHeight[i]);
+                  N=N-1;
+              }
+            }
+			newHeight = height.slice();
+            //alert("New height length array : "+ newHeight.length);
+          //  newHeight=newHeight.toString();
+          //  document.getElementById("demo2").innerHTML=newHeight;
+          //   height=height.toString();
+          //    document.getElementById("demo4").innerHTML=height;
+            return newHeight;
+      }
+	  
+      function onStraightSight(height,distance)	{
+          var first=height[0];
+          var last=height[height.length-1];
+          var fixedTanRatio;
+          var sample= height.length-1;
+          //alert(sample);
+          if(first>last)
+          {
+                //alert("When target height is less than source height");
+                var newHeight=first-last;
+                //alert("Last H : "+last);
+                //alert("first H : "+first);
+                //alert("newHeight H : "+newHeight);
+                fixedTanRatio=newHeight/distance;
+                //alert("fixedSubDistance distance "+fixedTanRatio);
+
+                  var tanRatio= Math.tan(fixedTanRatio);
+                  //alert("tanRatio is now : "+ tanRatio);
+
+                var fixedSubDistance=distance/sample;
+                //alert("fixedSubDistance distance "+fixedSubDistance);
+                var xDistance=0;
+                for (var i = height.length; i >0 ; i--)
+                 {
+                    // alert(" i is " + i);
+                     var xHeight;
+                     if(i== height.length){}
+                     else
+                     {
+                          xDistance=xDistance+fixedSubDistance;
+                        //  alert("new distance "+xDistance);
+                          var xLast= Math.abs(last);
+                          //  alert("xLast value =: "+ xLast);
+                          xHeight =tanRatio*xDistance + xLast;
+                          //alert("xHeight =: "+ xHeight);
+                          //alert("height =: "+ height[i]);
+                              if(height[i]>xHeight)
+                                {
+                            //      alert(" false");
+                                  return false;
+                                }
+                        }
+                   }
+
+           }
+           else
+           {
+             //When target height is grteater than source height
+             //alert("When target height is grteater than source height");
+               var newHeight=last-first;
+               //alert("Last H : "+last);
+                //alert("first H : "+first);
+                 //alert("newHeight H : "+newHeight);
+               fixedTanRatio=newHeight/distance;//max ratio which we can go
+                //alert("fixedTanRatio distance or max ratio which we can go "+fixedTanRatio);
+                 var tanRatio= Math.tan(fixedTanRatio);
+                 //alert("tanRatio is now : "+ tanRatio);
+
+                var fixedSubDistance=distance/sample;//each sample distance
+                 //alert("distance max "+ distance);
+                 //alert("fixedSubDistance distance or max ratio which we can go "+fixedSubDistance);
+                  var xDistance=0;
+                  for (var i = 0; i < height.length-1; i++)
+                  {
+                  //    alert(" i is " + i);
+
+                      var xHeight;
+                      if(i==0){}
+                      else
+                      {
+                          xDistance=xDistance+fixedSubDistance;
+                    //      alert("new distance "+xDistance);
+                          var xFirst= Math.abs(last);
+                      //    alert("xFirst value =: "+ xFirst);
+                          xHeight =tanRatio*xDistance + first;
+                        //  alert("xHeight =: "+ xHeight);
+                          //alert("height =: "+ height[i]);
+                          if(height[i]>xHeight)
+                            {
+                            //    alert("result false");
+                              return false;
+                            }
+                      }
+                  }
+           }
+            // alert("result true");
+          return true;
+        }
+		
+      function makeCircle(center, radius, startAngle, endAngle, angleStep, map)	{
+		var points = Array();
+        var EARTH_RADIUS = 6378100.0;
+        var lat = center.lat * Math.PI / 180.0;
+        var lon = center.lng * Math.PI / 180.0;
+        for (var t = startAngle, i = 0; t <= endAngle; t += angleStep, i++)	{
+			var latPoint = lat + (radius / EARTH_RADIUS) * Math.sin(t);
+			var lonPoint = lon + (radius / EARTH_RADIUS) * Math.cos(t) / Math.cos(lat);
+			points[i] = {lat:(latPoint * 180.0 / Math.PI), lng:(lonPoint * 180.0 / Math.PI)};
+			//DEBUG
+			//new google.maps.Marker({
+			//	position: points[i],
+			//	map: map,
+			//	title: "point #" + i
+			//});
+		}
+		var viewPoints = points.slice();
+		// add center point if antenna's range is not 369 degree
+		viewPoints.push(center);
+		// Display a polyline of the elevation path.
+		new google.maps.Polyline({
+			path: [viewPoints[viewPoints.length-1], viewPoints[0]],
+			strokeColor: '#FF0000',
+			strokeOpacity: 0.8,
+			map: map
+		});
+		for(var i = 1; i < viewPoints.length; i++)	{
+			// Display a polyline of the elevation path.
+			new google.maps.Polyline({
+				path: [viewPoints[i-1], viewPoints[i]],
+				strokeColor: '#FF0000',
+				strokeOpacity: 0.8,
+				map: map
+			});
+		}
+		return points;
+      }
+	
+      function displayPathElevation(center, radius, startAngle, endAngle, angleStep, samples, antennaHeight, retrieverHeight, matrixObjct1, matrixObjct2, map) {
+		// Add a marker for this city to the circle center.
+		new google.maps.Marker({
+			position: center,
+			map: map,
+			title: "center"
+		});
+		var points = makeCircle(center, radius, startAngle, endAngle, angleStep, map);
+		var cnt = 0;
+		plotElevation(matrixObjct1, matrixObjct2, center, points, cnt, samples, antennaHeight, retrieverHeight, map);
+      }
+
+      function plotElevation(matrixObjct1, matrixObjct2, center, points, cnt, samples, antennaHeight, retrieverHeight, map) {
+		var coordinates = pointsAlongPath(samples, center, points[cnt], map);
+		var samples2 = 11;
+		var i = 1;
+		plotElevation2(matrixObjct1, matrixObjct2, center, coordinates, i, cnt, samples2, antennaHeight, retrieverHeight, map);
+		if(cnt < points.length - 1)	{
+			cnt++;
+			plotElevation(matrixObjct1, matrixObjct2, center, points, cnt, samples, antennaHeight, retrieverHeight, map);
+		}
+      }
+
+      function plotElevation2(matrixObjct1, matrixObjct2, center, coordinates, i, cnt, samples2, antennaHeight, retrieverHeight, map) {
+		var elevations = getElevationAndPoints(samples2, center, coordinates[i], matrixObjct1, matrixObjct2, map);
+		var color;
+		var height = Array();
+		//DEBUG
+		//new google.maps.Marker({
+		//	position: coordinates[i],
+		//	map: map,
+		//	title: "i = " + i + ", cnt = " + cnt
+		//});
+		var distance = getDistanceFromLatLonInKm(center.lat, center.lng, coordinates[i].lat, coordinates[i].lng);
+		for(var e = 0; e < elevations.length; e++) height[e] = elevations[e].heig;
+		height[0] = height[0] + antennaHeight;
+		height[elevations.length-1] = height[elevations.length-1] + retrieverHeight;
+		getHeight(height, distance * 1000, samples2 - 1);
+		//for(var k = 0; k < elevations.length; k++)	console.log("newHeight = " + newHeight[k] + " height = " + height[k] + " k = " + k + " i = " + i + " cnt = " + cnt);
+		if(onStraightSight(newHeight, distance * 1000))	color = '#FF0000';
+		else	color = '#000000';
+		//console.log('i= ' + i + ' cnt= ' + cnt + ' samples2= ' + samples2);
+		new google.maps.Circle({
+			strokeColor: color,
+			strokeOpacity: 0.8,
+			strokeWeight: 0.8,
+			fillColor: color,
+			fillOpacity: 0.8,
+			map: map,
+			center: coordinates[i],
+			radius: 30
+		});
+		if(i < coordinates.length - 1)	{
+			i++;
+			samples2 += 10;
+			plotElevation2(matrixObjct1, matrixObjct2, center, coordinates, i, cnt, samples2, antennaHeight, retrieverHeight, map);
+		}
+      }
+		
+	  function do_interpolation(position, matrixObjct1, matrixObjct2)	{
+	  	if(position.lng < 8)	{
+	  		var X = matrixObjct1.rowCnt - ((position.lat - 45) * matrixObjct1.rowCnt);
+	  		var Y = (position.lng - 7) * matrixObjct1.colCnt;
+	  		return Interpolizer(X, Y, matrixObjct1.matrix);
+	  	} else	{
+	  		var X = matrixObjct2.rowCnt - ((position.lat - 45) * matrixObjct2.rowCnt);
+	  		var Y = (position.lng - 8) * matrixObjct2.colCnt;
+	  		return Interpolizer(X, Y, matrixObjct2.matrix);
+	  	}
+	  }
+	  
+	  function init_interpolation(filepath)	{
+	  	var matrix = new Array();
+	  	var var_row_number = 1201 + 1;
+	  	var var_col_number = 1201 + 1;
+	  	for (var i=0; i < var_row_number; i++) {
+	  		matrix[i] = new Array();
+	  		for (j=0; j < var_col_number; j++) {
+	  			matrix[i][j] = 0;
+	  		}
+	  	}
+	  	matrix[0][0] = null;
+	  	var oReq = new XMLHttpRequest();
+	  	oReq.open("GET", filepath, true);
+	  	oReq.responseType = "arraybuffer";
+	  	oReq.onload = function (oEvent) {
+	  		var arrayBuffer = oReq.response; // Note: not oReq.responseText
+	  		if (arrayBuffer) {
+	  			var TwoByteArray = new Int16Array(arrayBuffer);
+	  			//Load the data into the matrix Array
+	  			for(var i = 0, e = 0; i < var_row_number; i++)	{
+	  				for(var j = 0; j < var_col_number; j++)	{
+	  					if(i == 0)	{
+	  						if(j > 0)	{
+	  							matrix[(i)][(j)] = j - 1;
+	  						}
+	  					}
+	  					else	{
+	  						if(j == 0)	{
+	  							matrix[(i)][(j)] = i - 1;
+	  						}
+	  						else	{
+	  							matrix[(i)][(j)] = reverse(TwoByteArray[e]);
+	  							e++;
+	  						}
+	  					}
+	  				}
+	  			}
+	  		}
+	  	};
+	  	oReq.send(null);
+	  	return {matrix: matrix, rowCnt: var_row_number - 1, colCnt: var_col_number - 1};
+	  }
+	  
+	  function reverse(bits) {
+	  	var  x = new Int16Array(1); x[0]=bits;
+	  	x[0] = ((x[0] & 0x00FF) << 8) | ((x[0] & 0xFF00) >>> 8);
+	  	return x[0];
+	  }
+		
+	  function pointsAlongPath(pointsNumber, coordinateA, coordinateB, map)	{
+		//DEBUG
+		//new google.maps.Polyline({
+		//	path: [coordinateA, coordinateB],
+		//	strokeColor: '#000000',
+		//	strokeOpacity: 0.8,
+		//	map: map
+		//});
+		var absDist = Math.abs(coordinateA.lat - coordinateB.lat);
+		if(coordinateA.lat > coordinateB.lat && absDist > 7.105427357601002e-15)	{
+			var latDistance = absDist;
+			var minLat = coordinateB.lat;
+			var e = pointsNumber - 1, inc = -1;
+		} else	{
+			if(coordinateA.lat < coordinateB.lat && absDist > 7.105427357601002e-15)	{
+				var latDistance = absDist;
+				var minLat = coordinateA.lat;
+				var e = 0, inc = 1;
+			} else	{
+				if(coordinateA.lat == coordinateB.lat || absDist <= 7.105427357601002e-15)	{
+					if(coordinateA.lng > coordinateB.lng)	{
+						var lngDistance = coordinateA.lng - coordinateB.lng;
+						var minLng = coordinateB.lng;
+						var e = pointsNumber - 1, inc = -1;
+					} else	{
+						var lngDistance = coordinateB.lng - coordinateA.lng;
+						var minLng = coordinateA.lng;
+						var e = 0, inc = 1;
+					}
+					var points = Array();
+					for(var i = 0, f = 0; f < pointsNumber; i += (lngDistance / (pointsNumber - 1)), e += inc, f++)	{
+						points[e] = {
+							lat: coordinateA.lat,
+							lng: minLng + i
+						}
+						//DEBUG
+						//new google.maps.Marker({
+						//	position: points[e],
+						//	map: map,
+						//	title: "e = " + e
+						//});
+					}
+					return points;
+				}
+			}
+		}
+		var points = Array();
+		for(var i = 0, f = 0; f < pointsNumber; i += (latDistance / (pointsNumber - 1)), e += inc, f++)	{
+			points[e] = {
+				lat: minLat + i,
+				lng: coordinateA.lng + ((coordinateB.lng - coordinateA.lng)*(((minLat + i) - coordinateA.lat) / (coordinateB.lat - coordinateA.lat)))
+			}
+			//DEBUG
+			//new google.maps.Marker({
+			//	position: points[e],
+			//	map: map,
+			//	title: "e = " + e
+			//});
+		}
+		return points;
+	  }
+	  
+	  function getElevationAndPoints(pointsNumber, coordinateA, coordinateB, matrixObjct1, matrixObjct2, map)	{
+		var heights = Array();
+		var result;
+		var points = pointsAlongPath(pointsNumber, coordinateA, coordinateB, map);
+		for(var i = 0; i < pointsNumber; i++)	{
+			//DEBUG
+			//new google.maps.Marker({
+			//	position: points[i],
+			//	map: map,
+			//	title: "i = " + i
+			//});
+			result = do_interpolation(points[i], matrixObjct1, matrixObjct2);
+			heights[i] = {
+				heig: (result.result),
+				lat: points[i].lat,
+				lng: points[i].lng
+			}
+		}
+		return heights;
+	  }
+	  
+      </script>
+      <script async defer
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBCU1N2q5q_bQB98XCSL-9CphMQvyjjuAQ&callback=initMap">
+      </script>
+      <div id="demo"></div>
+    </div>
+  </body>
+</html>
