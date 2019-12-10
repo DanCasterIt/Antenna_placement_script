@@ -1,6 +1,6 @@
-#Documentation
+# Documentation
 can be fount in ./Latex/report.pdf
-#How to test the script
+# How to test the script
 To test laboratory.html you have to host in a web-server all these files:
 
 	laboratory.html
