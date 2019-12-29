@@ -1,6 +1,8 @@
-# Documentation
+# Antenna placement javascript application
+![Image of the final project](https://github.com/DanCasterIt/Antenna_placement_script/blob/master/Latex/project_finished.png)
+## Documentation
 can be fount in ./Latex/report.pdf
-# How to test the script
+## How to test the script
 To test laboratory.html you have to host in a web-server all these files:
 
 	laboratory.html
